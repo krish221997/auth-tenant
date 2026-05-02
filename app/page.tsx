@@ -14,20 +14,7 @@ type Theme = "dark" | "light";
 // sync. Same approach you'd use in any tenant app — no framework
 // dependency. Returns "dark" or "light".
 function useSystemTheme(): Theme {
-  // Read the OS preference SYNCHRONOUSLY on first render via a lazy
-  // initializer. Critical for the @withone/auth post-reload flow:
-  // when the package detects an OAuth return it does a hard reload,
-  // and on the fresh mount the very first render runs detectOAuthReturn
-  // synchronously — before any useEffect fires. So the theme passed to
-  // useOneAuth on render 1 is what the check iframe gets, period.
-  // If we initialized to "light" and corrected later in useEffect, the
-  // iframe would already be opened with the wrong theme.
-  const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return "light";
-    return window.matchMedia("(prefers-color-scheme: dark)").matches
-      ? "dark"
-      : "light";
-  });
+  const [theme, setTheme] = useState<Theme>("light");
 
   useEffect(() => {
     if (typeof window === "undefined" || !window.matchMedia) return;
