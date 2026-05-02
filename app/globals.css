@@ -42,8 +42,7 @@ a {
   text-decoration: none;
 }
 
-@media (prefers-color-scheme: dark) {
-  html {
-    color-scheme: dark;
-  }
-}
+/* Note: do NOT set `html { color-scheme: dark }`. It propagates to
+ * embedded iframes and forces a dark UA canvas behind their content,
+ * which paints over transparent iframe documents (e.g. the @withone/auth
+ * widget) instead of letting the parent show through. */

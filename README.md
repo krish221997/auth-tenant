@@ -1,36 +1,58 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# auth-tenant
 
-## Getting Started
+Minimal Next.js app that embeds [`@withone/auth`](https://www.npmjs.com/package/@withone/auth)
+to verify the package's same-window OAuth-return behavior on a non-`withone.ai`
+origin.
 
-First, run the development server:
+This exists to reproduce — and confirm the fix for — the bug where the AuthKit
+iframe would re-open after closing it and navigating around (caused by Next.js
+App Router caching the `?one_auth_state=...` query param). The fix ships in
+`@withone/auth@1.1.9`.
+
+## Setup
+
+```bash
+npm install
+```
+
+Create `.env.local`:
+
+```
+ONE_SECRET_KEY=sk_live_or_test_your_secret
+```
+
+> The secret is read by `app/api/one-auth/route.ts` to mint AuthKit tokens.
+> `.env.local` is gitignored.
+
+## Run
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# open http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Repro steps
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+1. Click **Connect Integration** on the home page.
+2. Complete the OAuth flow on the provider (Notion, Slack, Gmail, etc.).
+3. Land back on `/`. URL should briefly flash `?one_auth_state=…`, then
+   hard-reload to clean.
+4. Dismiss the auth iframe.
+5. Click **Open Settings** → **← Back home**.
+6. ✅ Pass: iframe does NOT re-open. URL stays clean.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## Files
 
-## Learn More
+| File | Purpose |
+| --- | --- |
+| `app/api/one-auth/route.ts` | Token endpoint per the AuthKit setup docs |
+| `app/page.tsx` | Connect button + theme detection (`prefers-color-scheme`) |
+| `app/settings/page.tsx` | Destination route to test post-OAuth navigation |
+| `app/globals.css` | Minimal styling. Note: do NOT set `color-scheme: dark` on `<html>` — it makes browsers paint a dark UA canvas behind transparent iframe content, which obscures the parent. |
 
-To learn more about Next.js, take a look at the following resources:
+## Notes
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Theme: `useSystemTheme()` reads `prefers-color-scheme` and passes
+  `appTheme: "dark" | "light"` to `useOneAuth` so the iframe matches.
+- Generic / framework-agnostic: nothing here is Next.js-specific beyond the
+  API route shape. The same flow works in any tenant app on any framework.
