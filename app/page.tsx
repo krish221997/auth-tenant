@@ -10,14 +10,19 @@ const USER_ID = "tenant-test-user-1";
 
 type Theme = "dark" | "light";
 
-// Reads the parent OS / browser color-scheme preference and keeps it in
-// sync. Same approach you'd use in any tenant app — no framework
-// dependency. Returns "dark" or "light".
-function useSystemTheme(): Theme {
-  const [theme, setTheme] = useState<Theme>("light");
+// Reads the parent OS / browser color-scheme preference. Returns null
+// until it's known (i.e., until the post-mount effect runs). Callers
+// MUST gate any iframe-opening side effect behind a non-null theme,
+// otherwise the iframe gets opened with a guessed default and the
+// post-OAuth check iframe ends up in the wrong color scheme.
+function useSystemTheme(): Theme | null {
+  const [theme, setTheme] = useState<Theme | null>(null);
 
   useEffect(() => {
-    if (typeof window === "undefined" || !window.matchMedia) return;
+    if (typeof window === "undefined" || !window.matchMedia) {
+      setTheme("light");
+      return;
+    }
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const apply = () => setTheme(mq.matches ? "dark" : "light");
     apply();
@@ -28,9 +33,12 @@ function useSystemTheme(): Theme {
   return theme;
 }
 
-export default function Home() {
-  const theme = useSystemTheme();
-
+// Inner component: only mounted once `theme` is known. This is critical
+// — `useOneAuth` runs `detectOAuthReturn` synchronously during render,
+// and on the post-OAuth hard-reload that detection opens the check
+// iframe immediately. If we mounted this component while theme was
+// still "guessing" we'd open the iframe with the wrong color scheme.
+function ConnectArea({ theme }: { theme: Theme }) {
   const { open } = useOneAuth({
     appTheme: theme,
     token: {
@@ -53,18 +61,64 @@ export default function Home() {
     },
   });
 
-  // Page-level theme tokens. Mirrored to the iframe via `appTheme` above
-  // so the embedded auth widget matches the parent's color scheme.
   const isDark = theme === "dark";
   const palette = {
-    bg: isDark ? "#0b0b0b" : "#fff",
-    fg: isDark ? "#f5f5f5" : "#111",
-    muted: isDark ? "#a3a3a3" : "#555",
-    subtle: isDark ? "#737373" : "#888",
-    border: isDark ? "#262626" : "#ddd",
     primaryBg: isDark ? "#fff" : "#111",
     primaryFg: isDark ? "#111" : "#fff",
     primaryBorder: isDark ? "#fff" : "#111",
+    border: isDark ? "#262626" : "#ddd",
+    bg: isDark ? "#0b0b0b" : "#fff",
+    fg: isDark ? "#f5f5f5" : "#111",
+  };
+
+  return (
+    <div style={{ display: "flex", gap: 12 }}>
+      <button
+        onClick={open}
+        style={{
+          padding: "10px 18px",
+          borderRadius: 8,
+          border: `1px solid ${palette.primaryBorder}`,
+          background: palette.primaryBg,
+          color: palette.primaryFg,
+          cursor: "pointer",
+          fontSize: 14,
+        }}
+      >
+        Connect Integration
+      </button>
+      <Link
+        href="/settings"
+        style={{
+          padding: "10px 18px",
+          borderRadius: 8,
+          border: `1px solid ${palette.border}`,
+          background: palette.bg,
+          color: palette.fg,
+          textDecoration: "none",
+          fontSize: 14,
+        }}
+      >
+        Open Settings
+      </Link>
+    </div>
+  );
+}
+
+export default function Home() {
+  const theme = useSystemTheme();
+
+  // While theme is null (first SSR pass + first client render), render
+  // a stable placeholder so the HTML matches across server/client (no
+  // hydration mismatch) AND so the @withone/auth iframe is never
+  // mounted with a guessed theme. The Connect button shows up after
+  // the matchMedia effect resolves the real value.
+  const isDark = theme === "dark";
+  const palette = {
+    bg: theme === null ? "#fff" : isDark ? "#0b0b0b" : "#fff",
+    fg: theme === null ? "#111" : isDark ? "#f5f5f5" : "#111",
+    muted: theme === null ? "#555" : isDark ? "#a3a3a3" : "#555",
+    subtle: theme === null ? "#888" : isDark ? "#737373" : "#888",
   };
 
   return (
@@ -88,9 +142,13 @@ export default function Home() {
 
       <p style={{ color: palette.muted, lineHeight: 1.5 }}>
         This app verifies that <code>@withone/auth</code> v1.1.9 behaves
-        correctly on a non-withone origin. Currently using{" "}
-        <strong>{theme}</strong> theme (auto-detected from system
-        preference) — the iframe will match.
+        correctly on a non-withone origin.{" "}
+        {theme && (
+          <>
+            Currently using <strong>{theme}</strong> theme (auto-detected
+            from system preference) — the iframe will match.
+          </>
+        )}
       </p>
 
       <ol style={{ color: palette.muted, lineHeight: 1.7, paddingLeft: 18 }}>
@@ -117,36 +175,11 @@ export default function Home() {
         </li>
       </ol>
 
-      <div style={{ display: "flex", gap: 12 }}>
-        <button
-          onClick={open}
-          style={{
-            padding: "10px 18px",
-            borderRadius: 8,
-            border: `1px solid ${palette.primaryBorder}`,
-            background: palette.primaryBg,
-            color: palette.primaryFg,
-            cursor: "pointer",
-            fontSize: 14,
-          }}
-        >
-          Connect Integration
-        </button>
-        <Link
-          href="/settings"
-          style={{
-            padding: "10px 18px",
-            borderRadius: 8,
-            border: `1px solid ${palette.border}`,
-            background: palette.bg,
-            color: palette.fg,
-            textDecoration: "none",
-            fontSize: 14,
-          }}
-        >
-          Open Settings
-        </Link>
-      </div>
+      {theme === null ? (
+        <p style={{ color: palette.subtle, fontSize: 12 }}>Loading…</p>
+      ) : (
+        <ConnectArea theme={theme} />
+      )}
 
       <p style={{ color: palette.subtle, fontSize: 12 }}>
         Open DevTools, watch the URL bar, and observe whether the iframe
