@@ -41,6 +41,7 @@ function useSystemTheme(): Theme | null {
 function ConnectArea({ theme }: { theme: Theme }) {
   const { open } = useOneAuth({
     appTheme: theme,
+    "authWindow": "popup",
     token: {
       url: `${typeof window !== "undefined" ? window.location.origin : ""}/api/one-auth`,
       headers: {
